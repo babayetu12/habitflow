@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
 export default function Auth() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<User | null>(null)
   const [message, setMessage] = useState('')
 
   useEffect(() => {
