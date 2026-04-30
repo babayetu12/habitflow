@@ -1,19 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+let supabase: SupabaseClient | null = null
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// Helper function to get current user
-export async function getCurrentUser() {
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 }
 
-// Helper function to sign in anonymously (for demo purposes)
-export async function signInAnonymously() {
-  const { data, error } = await supabase.auth.signInAnonymously()
-  if (error) throw error
-  return data.user
-}
+export { supabase }
+

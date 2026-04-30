@@ -135,8 +135,8 @@ export default function Home() {
     const newHabit: Habit = {
       id: generateId(),
       name,
-      completedDates: [],
-      createdAt: getTodayDateString(),
+      completed_dates: [],
+      created_at: getTodayDateString(),
     }
 
     setHabits(prev => [...prev, newHabit])
@@ -805,7 +805,7 @@ export default function Home() {
                 const automaticity = calculateAutomaticity(habit)
                 const firstDate = getFirstCompletedDate(habit)
                 const totalDays = getTotalDaysSinceStart(habit)
-                const allDates = [...habit.completedDates].sort()
+                const allDates = [...habit.completed_dates].sort()
                 const dailyData = getLast30DaysStats(habit).map(d => ({
                   ...d,
                   date: new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })

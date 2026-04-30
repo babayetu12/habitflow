@@ -1,4 +1,4 @@
-import { supabase, getCurrentUser, signInAnonymously } from './supabase'
+import { supabase } from './supabase'
 
 export interface Habit {
   id: string
@@ -10,7 +10,12 @@ export interface Habit {
 export interface AppData {
   version: number
   exportedAt: string
-  habits: Habit[]
+  habits: {
+    id: string
+    name: string
+    completedDates: string[]
+    createdAt: string
+  }[]
 }
 
 export function generateId(): string {
@@ -18,11 +23,10 @@ export function generateId(): string {
 }
 
 export async function getHabits(): Promise<Habit[]> {
+  if (!supabase) return []
+
   try {
-    let user = await getCurrentUser()
-    if (!user) {
-      user = await signInAnonymously()
-    }
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return []
 
     const { data, error } = await supabase
@@ -39,8 +43,8 @@ export async function getHabits(): Promise<Habit[]> {
     return data.map(habit => ({
       id: habit.id,
       name: habit.name,
-      completedDates: habit.completed_dates,
-      createdAt: habit.created_at,
+      completed_dates: habit.completed_dates,
+      created_at: habit.created_at,
     }))
   } catch (error) {
     console.error('Failed to get habits:', error)
@@ -49,8 +53,10 @@ export async function getHabits(): Promise<Habit[]> {
 }
 
 export async function saveHabits(habits: Habit[]): Promise<void> {
+  if (!supabase) return
+
   try {
-    const user = await getCurrentUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     // First, delete existing habits for this user
@@ -61,8 +67,8 @@ export async function saveHabits(habits: Habit[]): Promise<void> {
       id: habit.id,
       user_id: user.id,
       name: habit.name,
-      completed_dates: habit.completedDates,
-      created_at: habit.createdAt,
+      completed_dates: habit.completed_dates,
+      created_at: habit.created_at,
     }))
 
     const { error } = await supabase.from('habits').insert(habitsToInsert)
@@ -94,9 +100,9 @@ export function isYesterday(dateStr: string): boolean {
 }
 
 export function calculateStreak(habit: Habit): number {
-  if (habit.completedDates.length === 0) return 0
+  if (habit.completed_dates.length === 0) return 0
 
-  const sortedDates = [...habit.completedDates].sort().reverse()
+  const sortedDates = [...habit.completed_dates].sort().reverse()
   const today = getTodayDateString()
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
@@ -129,8 +135,8 @@ export function calculateStreak(habit: Habit): number {
 }
 
 export function getFirstCompletedDate(habit: Habit): string | null {
-  if (habit.completedDates.length === 0) return null
-  return [...habit.completedDates].sort()[0]
+  if (habit.completed_dates.length === 0) return null
+  return [...habit.completed_dates].sort()[0]
 }
 
 export function getTotalDaysSinceStart(habit: Habit): number {
@@ -146,7 +152,7 @@ export function getTotalDaysSinceStart(habit: Habit): number {
 export function getCompletionPercentage(habit: Habit): number {
   const totalDays = getTotalDaysSinceStart(habit)
   if (totalDays === 0) return 0
-  return Math.round((habit.completedDates.length / totalDays) * 100)
+  return Math.round((habit.completed_dates.length / totalDays) * 100)
 }
 
 export interface HabitStats {
@@ -160,7 +166,7 @@ export interface HabitStats {
 }
 
 export function calculateHabitStats(habit: Habit): HabitStats {
-  const sortedDates = [...habit.completedDates].sort()
+  const sortedDates = [...habit.completed_dates].sort()
   
   let longestStreak = 0
   let currentStreak = 0
@@ -223,21 +229,21 @@ export function calculateHabitStats(habit: Habit): HabitStats {
 }
 
 export function isDateCompleted(habit: Habit, date: string): boolean {
-  return habit.completedDates.includes(date)
+  return habit.completed_dates.includes(date)
 }
 
 export function toggleDate(habit: Habit, date: string): Habit {
-  const isCompleted = habit.completedDates.includes(date)
+  const isCompleted = habit.completed_dates.includes(date)
   
   if (isCompleted) {
     return {
       ...habit,
-      completedDates: habit.completedDates.filter(d => d !== date),
+      completed_dates: habit.completed_dates.filter(d => d !== date),
     }
   } else {
     return {
       ...habit,
-      completedDates: [...habit.completedDates, date].sort(),
+      completed_dates: [...habit.completed_dates, date].sort(),
     }
   }
 }
@@ -247,7 +253,12 @@ export async function exportData(): Promise<string> {
   const data: AppData = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    habits,
+    habits: habits.map(h => ({
+      id: h.id,
+      name: h.name,
+      completedDates: h.completed_dates,
+      createdAt: h.created_at,
+    })),
   }
   return JSON.stringify(data, null, 2)
 }
@@ -266,7 +277,12 @@ export async function importData(jsonString: string): Promise<{ success: boolean
       }
     }
 
-    await saveHabits(data.habits)
+    await saveHabits(data.habits.map(h => ({
+      id: h.id,
+      name: h.name,
+      completed_dates: h.completedDates,
+      created_at: h.createdAt,
+    })))
     return { success: true }
   } catch {
     return { success: false, error: 'Failed to parse JSON' }
@@ -338,7 +354,7 @@ export function getLast30DaysStats(habit: Habit): DailyCompletion[] {
     const date = new Date(today)
     date.setDate(date.getDate() - i)
     const dateStr = formatDateString(date)
-    const completed = habit.completedDates.includes(dateStr) ? 1 : 0
+    const completed = habit.completed_dates.includes(dateStr) ? 1 : 0
     result.push({ date: dateStr, completed, total: 1 })
   }
   
@@ -358,7 +374,7 @@ export function getLast12WeeksStats(habit: Habit): WeeklyStats[] {
     let completed = 0
     const current = new Date(weekStart)
     while (current <= weekEnd) {
-      if (habit.completedDates.includes(formatDateString(current))) {
+      if (habit.completed_dates.includes(formatDateString(current))) {
         completed++
       }
       current.setDate(current.getDate() + 1)
@@ -388,7 +404,7 @@ export function getLast12MonthsStats(habit: Habit): { month: string; completed: 
     const current = new Date(monthStart)
     
     while (current <= monthEnd) {
-      if (habit.completedDates.includes(formatDateString(current))) {
+      if (habit.completed_dates.includes(formatDateString(current))) {
         completed++
       }
       current.setDate(current.getDate() + 1)
@@ -408,7 +424,7 @@ export function getCompletionByWeekday(habit: Habit): { day: string; count: numb
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const counts = [0, 0, 0, 0, 0, 0, 0]
   
-  for (const dateStr of habit.completedDates) {
+  for (const dateStr of habit.completed_dates) {
     const date = new Date(dateStr + 'T00:00:00')
     counts[date.getDay()]++
   }
@@ -431,7 +447,7 @@ export interface HabitInsights {
 
 export function calculateHabitInsights(habit: Habit): HabitInsights {
   const today = getTodayDateString()
-  const sortedDates = [...habit.completedDates].sort()
+  const sortedDates = [...habit.completed_dates].sort()
   
   if (sortedDates.length === 0) {
     return {
@@ -498,7 +514,7 @@ export function calculateHabitInsights(habit: Habit): HabitInsights {
   let currentWeekCompletion = 0
   const currentDateRef = new Date(weekStart)
   while (currentDateRef <= todayDate) {
-    if (habit.completedDates.includes(formatDateString(currentDateRef))) {
+    if (habit.completed_dates.includes(formatDateString(currentDateRef))) {
       currentWeekCompletion++
     }
     currentDateRef.setDate(currentDateRef.getDate() + 1)
@@ -508,7 +524,7 @@ export function calculateHabitInsights(habit: Habit): HabitInsights {
   let currentMonthCompletion = 0
   const monthDateRef = new Date(monthStart)
   while (monthDateRef <= todayDate) {
-    if (habit.completedDates.includes(formatDateString(monthDateRef))) {
+    if (habit.completed_dates.includes(formatDateString(monthDateRef))) {
       currentMonthCompletion++
     }
     monthDateRef.setDate(monthDateRef.getDate() + 1)
@@ -561,23 +577,23 @@ export interface LeaderboardEntry {
 
 export function calculateHabitCorrelations(habit: Habit, allHabits: Habit[]): HabitCorrelation[] {
   if (allHabits.length <= 1) return []
-  if (habit.completedDates.length === 0) return []
+  if (habit.completed_dates.length === 0) return []
   
-  const habitDatesSet = new Set(habit.completedDates)
+  const habitDatesSet = new Set(habit.completed_dates)
   const correlations: HabitCorrelation[] = []
   
   for (const otherHabit of allHabits) {
     if (otherHabit.id === habit.id) continue
     
     let coCompletion = 0
-    for (const date of habit.completedDates) {
-      if (otherHabit.completedDates.includes(date)) {
+    for (const date of habit.completed_dates) {
+      if (otherHabit.completed_dates.includes(date)) {
         coCompletion++
       }
     }
     
-    const probability = habit.completedDates.length > 0 
-      ? (coCompletion / habit.completedDates.length) * 100 
+    const probability = habit.completed_dates.length > 0 
+      ? (coCompletion / habit.completed_dates.length) * 100 
       : 0
     
     if (probability >= 30) {
@@ -594,7 +610,7 @@ export function calculateHabitCorrelations(habit: Habit, allHabits: Habit[]): Ha
 }
 
 export function calculateMissProbability(habit: Habit): { daily: number; weekly: number; monthly: number } {
-  const sortedDates = [...habit.completedDates].sort()
+  const sortedDates = [...habit.completed_dates].sort()
   if (sortedDates.length === 0) return { daily: 100, weekly: 100, monthly: 100 }
   
   const today = getTodayDateString()
@@ -679,7 +695,7 @@ export function getGlobalHeatmap(habits: Habit[], weeksBack: number = 52): Heatm
   
   const dayMap = new Map<string, string[]>()
   for (const habit of habits) {
-    for (const date of habit.completedDates) {
+    for (const date of habit.completed_dates) {
       const existing = dayMap.get(date) || []
       existing.push(habit.name)
       dayMap.set(date, existing)
@@ -712,7 +728,7 @@ export function getHabitHeatmap(habit: Habit, weeksBack: number = 52): HeatmapDa
   const startDate = new Date(today)
   startDate.setDate(startDate.getDate() - (weeksBack * 7))
   
-  const completedSet = new Set(habit.completedDates)
+  const completedSet = new Set(habit.completed_dates)
   
   const current = new Date(startDate)
   while (current <= today) {
@@ -748,7 +764,7 @@ export interface AutomaticityData {
 }
 
 export function calculateAutomaticity(habit: Habit): AutomaticityData {
-  const sortedDates = [...habit.completedDates].sort()
+  const sortedDates = [...habit.completed_dates].sort()
   if (sortedDates.length === 0) {
     return {
       currentAutomaticity: 0,
@@ -816,6 +832,8 @@ export interface HabitReflection {
 }
 
 export async function getReflections(habit: Habit): Promise<HabitReflection[]> {
+  if (!supabase) return []
+
   try {
     const { data, error } = await supabase
       .from('reflections')
@@ -841,10 +859,9 @@ export async function getReflections(habit: Habit): Promise<HabitReflection[]> {
 }
 
 export async function saveReflection(habitId: string, note: string, tweak?: string): Promise<void> {
-  try {
-    const user = await getCurrentUser()
-    if (!user) return
+  if (!supabase) return
 
+  try {
     const reflection = {
       id: generateId(),
       habit_id: habitId,
@@ -870,8 +887,8 @@ export function checkMissedHabits(habits: Habit[]): Habit[] {
   const yesterdayStr = formatDateString(yesterday)
   
   return habits.filter(h => {
-    const hasYesterday = h.completedDates.includes(yesterdayStr)
-    const hasToday = h.completedDates.includes(today)
+    const hasYesterday = h.completed_dates.includes(yesterdayStr)
+    const hasToday = h.completed_dates.includes(today)
     return hasYesterday && !hasToday
   })
 }
@@ -896,16 +913,16 @@ export function getSmartRecommendations(habits: Habit[]): SmartRecommendation[] 
   const yesterdayStr = formatDateString(yesterday)
   
   for (const habit of habits) {
-    const recentCompletions = habit.completedDates.filter(d => d >= thirtyDaysAgoStr && d !== today)
+    const recentCompletions = habit.completed_dates.filter(d => d >= thirtyDaysAgoStr && d !== today)
     const missRate = Math.round(((30 - recentCompletions.length) / 30) * 100)
     
     if (missRate >= 40) {
       const weekdayCounts = [0, 0, 0, 0, 0, 0, 0]
-      for (const date of habit.completedDates) {
+      for (const date of habit.completed_dates) {
         const day = new Date(date + 'T00:00:00').getDay()
         weekdayCounts[day]++
       }
-      const avgPerDay = habit.completedDates.length / 7
+      const avgPerDay = habit.completed_dates.length / 7
       const eveningLow = weekdayCounts[5] + weekdayCounts[6] < avgPerDay
       const suggestions: { text: string; type: string; potential: number }[] = []
       
