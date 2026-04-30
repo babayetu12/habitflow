@@ -1,7 +1,3 @@
--- Enable Row Level Security
-ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reflections ENABLE ROW LEVEL SECURITY;
-
 -- Create habits table
 CREATE TABLE habits (
   id TEXT PRIMARY KEY,
@@ -20,6 +16,10 @@ CREATE TABLE reflections (
   tweak TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Enable Row Level Security
+ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reflections ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for habits
 CREATE POLICY "Users can view their own habits" ON habits
