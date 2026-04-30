@@ -6,6 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  basePath: '/habitflow',
+  assetPrefix: '/habitflow/',
 }
 
 module.exports = nextConfig
