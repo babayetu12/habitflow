@@ -42,15 +42,21 @@ npm install
 
 3. Set up Supabase:
    - Create a new project at [supabase.com](https://supabase.com)
-   - Get your project URL and anon key
-   - Create a `.env.local` file:
+   - Go to Settings > API to get your project URL and anon key
+   - Copy `.env.example` to `.env.local` and fill in your values:
    ```
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
 4. Set up the database:
-   - Run the SQL in `supabase-setup.sql` to create tables
+   - In your Supabase dashboard, go to SQL Editor
+   - Run the SQL commands from `supabase-setup.sql` to create tables and policies
+
+5. Enable authentication (optional, but recommended):
+   - In Supabase dashboard, go to Authentication > Settings
+   - Configure your auth providers or use email/password
+   - For demo purposes, anonymous auth is enabled
 
 5. Run the development server:
 ```bash
