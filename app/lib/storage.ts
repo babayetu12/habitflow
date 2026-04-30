@@ -26,8 +26,14 @@ export async function getHabits(): Promise<Habit[]> {
   if (!supabase) return []
 
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      console.log('No active session, returning empty habits')
+      return []
+    }
+
+    const user = session.user
+    console.log('Loading habits for user:', user.email)
 
     const { data, error } = await supabase
       .from('habits')
@@ -40,12 +46,15 @@ export async function getHabits(): Promise<Habit[]> {
       return []
     }
 
-    return data.map(habit => ({
+    const habits = data.map(habit => ({
       id: habit.id,
       name: habit.name,
       completed_dates: habit.completed_dates,
       created_at: habit.created_at,
     }))
+
+    console.log(`Loaded ${habits.length} habits`)
+    return habits
   } catch (error) {
     console.error('Failed to get habits:', error)
     return []
@@ -56,14 +65,33 @@ export async function saveHabits(habits: Habit[]): Promise<void> {
   if (!supabase) return
 
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) {
+      console.warn('No active session, skipping save')
+      return
+    }
 
-    // First, delete existing habits for this user
-    await supabase.from('habits').delete().eq('user_id', user.id)
+    const user = session.user
 
-    // Then insert the new ones
-    const habitsToInsert = habits.map(habit => ({
+    // Get existing habits from database
+    const { data: existingHabits, error: fetchError } = await supabase
+      .from('habits')
+      .select('id')
+      .eq('user_id', user.id)
+
+    if (fetchError) {
+      console.error('Error fetching existing habits:', fetchError)
+      return
+    }
+
+    const existingIds = new Set(existingHabits?.map(h => h.id) || [])
+    const currentIds = new Set(habits.map(h => h.id))
+
+    // Habits to delete (exist in DB but not in current state)
+    const toDelete = existingHabits?.filter(h => !currentIds.has(h.id)) || []
+
+    // Habits to insert/update
+    const toUpsert = habits.map(habit => ({
       id: habit.id,
       user_id: user.id,
       name: habit.name,
@@ -71,11 +99,32 @@ export async function saveHabits(habits: Habit[]): Promise<void> {
       created_at: habit.created_at,
     }))
 
-    const { error } = await supabase.from('habits').insert(habitsToInsert)
+    // Perform operations in transaction-like manner
+    if (toDelete.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('habits')
+        .delete()
+        .eq('user_id', user.id)
+        .in('id', toDelete.map(h => h.id))
 
-    if (error) {
-      console.error('Error saving habits:', error)
+      if (deleteError) {
+        console.error('Error deleting habits:', deleteError)
+        return
+      }
     }
+
+    if (toUpsert.length > 0) {
+      const { error: upsertError } = await supabase
+        .from('habits')
+        .upsert(toUpsert, { onConflict: 'id' })
+
+      if (upsertError) {
+        console.error('Error upserting habits:', upsertError)
+        return
+      }
+    }
+
+    console.log(`Saved ${toUpsert.length} habits, deleted ${toDelete.length} habits`)
   } catch (error) {
     console.error('Failed to save habits:', error)
   }

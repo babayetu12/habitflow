@@ -11,17 +11,36 @@ export default function Auth() {
   const [message, setMessage] = useState('')
 
   useEffect(() => {
+    let mounted = true
+
     // Get initial session
-    supabase?.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-    })
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase?.auth.getSession()
+        if (error) {
+          console.error('Session error:', error)
+        }
+        if (mounted) {
+          setUser(session?.user ?? null)
+          console.log('Initial session:', session?.user?.email || 'none')
+        }
+      } catch (error) {
+        console.error('Failed to get session:', error)
+      }
+    }
+
+    initializeAuth()
 
     // Listen for auth changes
-    const authListener = supabase?.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+    const authListener = supabase?.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email || 'none')
+      if (mounted) {
+        setUser(session?.user ?? null)
+      }
     })
 
     return () => {
+      mounted = false
       authListener?.data?.subscription?.unsubscribe()
     }
   }, [])
@@ -57,6 +76,17 @@ export default function Auth() {
     return (
       <div className="flex items-center gap-4 mb-6">
         <span className="text-muted">Signed in as: {user.email}</span>
+        <button
+          onClick={async () => {
+            const { data: { session } } = await supabase?.auth.getSession()
+            console.log('Current session:', session)
+            alert(`Session active: ${!!session}\nUser: ${session?.user?.email || 'none'}`)
+          }}
+          className="text-xs text-muted hover:text-white px-2 py-1 rounded border border-border hover:border-primary"
+          title="Check session status"
+        >
+          🔍
+        </button>
         <button
           onClick={signOut}
           className="text-sm text-muted hover:text-white px-3 py-1 rounded border border-border hover:border-primary"
