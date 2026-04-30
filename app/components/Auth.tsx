@@ -15,8 +15,10 @@ export default function Auth() {
 
     // Get initial session
     const initializeAuth = async () => {
+      if (!supabase) return
+
       try {
-        const { data, error } = await supabase?.auth.getSession()
+        const { data, error } = await supabase.auth.getSession()
         if (error) {
           console.error('Session error:', error)
         }
