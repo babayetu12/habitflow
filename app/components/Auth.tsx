@@ -80,9 +80,13 @@ export default function Auth() {
         <span className="text-muted">Signed in as: {user.email}</span>
         <button
           onClick={async () => {
-            const { data: { session } } = await supabase?.auth.getSession()
-            console.log('Current session:', session)
-            alert(`Session active: ${!!session}\nUser: ${session?.user?.email || 'none'}`)
+            if (!supabase) {
+              alert('Supabase not available')
+              return
+            }
+            const { data } = await supabase.auth.getSession()
+            console.log('Current session:', data.session)
+            alert(`Session active: ${!!data.session}\nUser: ${data.session?.user?.email || 'none'}`)
           }}
           className="text-xs text-muted hover:text-white px-2 py-1 rounded border border-border hover:border-primary"
           title="Check session status"
