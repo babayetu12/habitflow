@@ -151,30 +151,31 @@ export function isYesterday(dateStr: string): boolean {
 export function calculateStreak(habit: Habit): number {
   if (habit.completed_dates.length === 0) return 0
 
-  const sortedDates = [...habit.completed_dates].sort().reverse()
+  const completedSet = new Set(habit.completed_dates)
   const today = getTodayDateString()
+
+  // Check if today or yesterday was completed
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = formatDateString(yesterday)
 
-  const lastCompleted = sortedDates[0]
-  
-  if (lastCompleted !== today && lastCompleted !== yesterdayStr) {
+  // If neither today nor yesterday was completed, streak is 0
+  if (!completedSet.has(today) && !completedSet.has(yesterdayStr)) {
     return 0
   }
 
+  // Start counting from the most recent completion (today or yesterday)
+  let currentDate = completedSet.has(today) ? today : yesterdayStr
   let streak = 0
-  let startFrom = lastCompleted === today ? today : yesterdayStr
-  
-  const startDate = new Date(startFrom + 'T00:00:00')
 
-  for (let i = 0; i < 365; i++) {
-    const expectedDate = new Date(startDate)
-    expectedDate.setDate(expectedDate.getDate() - i)
-    const expectedStr = formatDateString(expectedDate)
-
-    if (sortedDates.includes(expectedStr)) {
+  // Count backwards from the starting point
+  while (true) {
+    if (completedSet.has(currentDate)) {
       streak++
+      // Move to previous day
+      const date = new Date(currentDate + 'T00:00:00')
+      date.setDate(date.getDate() - 1)
+      currentDate = formatDateString(date)
     } else {
       break
     }
@@ -216,56 +217,53 @@ export interface HabitStats {
 
 export function calculateHabitStats(habit: Habit): HabitStats {
   const sortedDates = [...habit.completed_dates].sort()
-  
-  let longestStreak = 0
-  let currentStreak = 0
-  let tempStreak = 0
-  let longestStreakDates: [string, string] = ['', '']
-  let currentStreakStart = ''
-  
-  const today = getTodayDateString()
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = formatDateString(yesterday)
+  const completedSet = new Set(habit.completed_dates)
 
-  for (let i = 0; i < sortedDates.length; i++) {
-    const current = sortedDates[i]
-    const prev = i > 0 ? sortedDates[i - 1] : null
-    
-    if (prev) {
-      const prevDate = new Date(prev + 'T00:00:00')
-      const currDate = new Date(current + 'T00:00:00')
+  let longestStreak = 0
+  let longestStreakDates: [string, string] = ['', '']
+
+  // Calculate longest streak by finding consecutive sequences
+  if (sortedDates.length > 0) {
+    let currentStreak = 1
+    let streakStart = sortedDates[0]
+
+    for (let i = 1; i < sortedDates.length; i++) {
+      const prevDate = new Date(sortedDates[i - 1] + 'T00:00:00')
+      const currDate = new Date(sortedDates[i] + 'T00:00:00')
       const diffDays = Math.floor((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
-      
+
       if (diffDays === 1) {
-        tempStreak++
+        currentStreak++
       } else {
-        if (tempStreak > longestStreak) {
-          longestStreak = tempStreak
-          longestStreakDates = [sortedDates[i - tempStreak], sortedDates[i - 1]]
+        // Check if this streak is longer than previous longest
+        if (currentStreak > longestStreak) {
+          longestStreak = currentStreak
+          longestStreakDates = [streakStart, sortedDates[i - 1]]
         }
-        tempStreak = 1
+        // Reset for new streak
+        currentStreak = 1
+        streakStart = sortedDates[i]
       }
-    } else {
-      tempStreak = 1
     }
-    
-    if (current === today || current === yesterdayStr) {
-      currentStreakStart = current
+
+    // Check the last streak
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak
+      longestStreakDates = [streakStart, sortedDates[sortedDates.length - 1]]
     }
   }
-  
-  if (tempStreak > longestStreak) {
-    longestStreak = tempStreak
-    longestStreakDates = [sortedDates[sortedDates.length - tempStreak], sortedDates[sortedDates.length - 1]]
+
+  // Handle single completion
+  if (sortedDates.length === 1) {
+    longestStreak = 1
+    longestStreakDates = [sortedDates[0], sortedDates[0]]
   }
-  
-  currentStreak = calculateStreak(habit)
-  
+
+  const currentStreak = calculateStreak(habit)
   const firstDate = getFirstCompletedDate(habit)
   const totalDays = getTotalDaysSinceStart(habit)
   const completionRate = totalDays > 0 ? Math.round((sortedDates.length / totalDays) * 100) : 0
-  
+
   return {
     currentStreak,
     longestStreak,
@@ -281,18 +279,48 @@ export function isDateCompleted(habit: Habit, date: string): boolean {
   return habit.completed_dates.includes(date)
 }
 
+export function getCompletionStatus(habit: Habit, date: string): 'completed' | 'pending' | 'future' {
+  const today = getTodayDateString()
+  const targetDate = new Date(date + 'T00:00:00')
+  const todayDate = new Date(today + 'T00:00:00')
+
+  if (targetDate > todayDate) {
+    return 'future'
+  }
+
+  return habit.completed_dates.includes(date) ? 'completed' : 'pending'
+}
+
+export function getHabitCompletionForPeriod(habit: Habit, dates: string[]): {
+  completed: number
+  total: number
+  rate: number
+} {
+  const completed = dates.filter(date => habit.completed_dates.includes(date)).length
+  const total = dates.length
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  return { completed, total, rate }
+}
+
 export function toggleDate(habit: Habit, date: string): Habit {
   const isCompleted = habit.completed_dates.includes(date)
-  
+
   if (isCompleted) {
+    // Remove the date
     return {
       ...habit,
       completed_dates: habit.completed_dates.filter(d => d !== date),
     }
   } else {
+    // Add the date (ensure no duplicates and sorted)
+    const newDates = [...habit.completed_dates]
+    if (!newDates.includes(date)) {
+      newDates.push(date)
+    }
     return {
       ...habit,
-      completed_dates: [...habit.completed_dates, date].sort(),
+      completed_dates: newDates.sort(),
     }
   }
 }
