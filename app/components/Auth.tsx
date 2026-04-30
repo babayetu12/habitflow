@@ -16,13 +16,13 @@ export default function Auth() {
     // Get initial session
     const initializeAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase?.auth.getSession()
+        const { data, error } = await supabase?.auth.getSession()
         if (error) {
           console.error('Session error:', error)
         }
         if (mounted) {
-          setUser(session?.user ?? null)
-          console.log('Initial session:', session?.user?.email || 'none')
+          setUser(data.session?.user ?? null)
+          console.log('Initial session:', data.session?.user?.email || 'none')
         }
       } catch (error) {
         console.error('Failed to get session:', error)
