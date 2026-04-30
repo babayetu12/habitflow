@@ -17,13 +17,13 @@ export default function Auth() {
     })
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase?.auth.onAuthStateChange((_event, session) => {
+    const authListener = supabase?.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      authListener?.data?.subscription?.unsubscribe()
+    }
   }, [])
 
   const signInWithEmail = async (e: React.FormEvent) => {
