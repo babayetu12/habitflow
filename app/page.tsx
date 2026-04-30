@@ -39,6 +39,7 @@ import {
   type Habit,
   type HeatmapDay,
 } from './lib/storage'
+import Auth from './components/Auth'
 import {
   LineChart,
   Line,
@@ -255,6 +256,7 @@ export default function Home() {
   return (
     <main className="min-h-screen p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
+        <Auth />
         <AnimatePresence>
           {showNudge && missedHabits.length > 0 && (
             <motion.div
